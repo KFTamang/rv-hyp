@@ -1,0 +1,26 @@
+# .github/workflows/ci.yml
+name: CI
+on: [push, pull_request]
+
+jobs:
+  qemu-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build toolchain image
+        run: docker build -t toolchain-image -f toolchain/Dockerfile .
+
+      - name: Build firmware/kernel
+        run: make build
+
+      - name: Run QEMU tests
+        run: make test
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu-logs
+          path: build/*.log
+
