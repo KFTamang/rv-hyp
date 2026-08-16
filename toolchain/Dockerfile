@@ -4,5 +4,5 @@ RUN apt-get update && apt-get install -y \
     gcc-riscv64-unknown-elf \
     qemu-system-misc \
     python3 python3-pip git make
-RUN pip3 install pytest pexpect
+RUN pip3 install --break-system-packages pytest pexpect pytest-timeout
 
