@@ -8,7 +8,6 @@ QEMU_CMD = (
     "-serial mon:stdio"
 )
 
-@pytest.mark.skip(reason="guest_kernel.elf not implemented yet; tracked as a follow-up (S-mode guest support)")
 def test_guest_boots():
     child = pexpect.spawn(QEMU_CMD, timeout=30)
     try:
