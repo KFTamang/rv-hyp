@@ -4,11 +4,21 @@
 use core::arch::global_asm;
 use core::panic::PanicInfo;
 
+/// Physical address the guest kernel's linker script places it at, and
+/// where QEMU's -kernel loader deposits build/guest_kernel.elf.
+const GUEST_ENTRY: usize = 0x8020_0000;
+
 global_asm!(
     r#"
     .section .text._start
     .global _start
 _start:
+    /* Only the boot hart (0) proceeds; QEMU starts every hart at this
+       same reset vector, and they would otherwise race on _stack_top
+       and the UART. */
+    csrr t0, mhartid
+    bnez t0, park
+
     la sp, _stack_top
 
     /* zero .bss */
@@ -20,11 +30,17 @@ _start:
     addi t0, t0, 8
     j 1b
 2:
+    /* Safety net: route any unexpected M-mode trap to the park loop
+       instead of falling through to whatever garbage mtvec defaults to. */
+    la t0, park
+    csrw mtvec, t0
+
     call rust_main
 
-3:
+    /* rust_main does not return, but land here defensively. */
+park:
     wfi
-    j 3b
+    j park
 "#
 );
 
@@ -49,15 +65,45 @@ fn uart_puts(s: &str) {
     }
 }
 
+/// Grants S/U-mode full read/write/execute access to the entire address
+/// space via a single NAPOT PMP region. Without this, S-mode has no
+/// memory access at all and the guest faults on its first instruction.
+fn pmp_allow_all() {
+    unsafe {
+        core::arch::asm!(
+            "li t0, -1",
+            "csrw pmpaddr0, t0",
+            "li t0, 0x1F", // A=NAPOT(3), X=1, W=1, R=1
+            "csrw pmpcfg0, t0",
+            out("t0") _,
+        );
+    }
+}
+
+/// Sets mstatus.MPP=S and mepc=entry, then mret's into the guest.
+fn enter_smode(entry: usize) -> ! {
+    unsafe {
+        core::arch::asm!(
+            "li t0, 0x1800",   // MPP mask (bits 11-12)
+            "csrc mstatus, t0",
+            "li t0, 0x0800",   // MPP = S (0b01 << 11)
+            "csrs mstatus, t0",
+            "csrw mepc, {entry}",
+            "mret",
+            entry = in(reg) entry,
+            options(noreturn),
+        );
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn rust_main() -> ! {
     uart_puts("Hello, world from M-mode!\n");
 
-    loop {
-        unsafe {
-            core::arch::asm!("wfi");
-        }
-    }
+    pmp_allow_all();
+
+    uart_puts("Jumping to S-mode guest...\n");
+    enter_smode(GUEST_ENTRY);
 }
 
 #[panic_handler]

@@ -1,4 +1,5 @@
 /build/
 /src/target/
+/guest/target/
 __pycache__/
 .pytest_cache/

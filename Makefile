@@ -1,7 +1,7 @@
 # Makefile
 build:
 	docker run --rm -v $(PWD):/work -w /work toolchain-image \
-	    make -C src/ TARGET=riscv64
+	    sh -c "make -C src/ TARGET=riscv64 && make -C guest/ TARGET=riscv64"
 
 test: build
 	docker run --rm -v $(PWD):/work -w /work toolchain-image \
